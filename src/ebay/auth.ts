@@ -30,11 +30,13 @@ export function getEbayApi(): eBayApi {
   });
 
   // Set the OAuth2 refresh token so the SDK can auto-refresh access tokens
-  apiInstance.OAuth2.setCredentials({
-    access_token: "",
-    refresh_token: config.ebay.refreshToken,
-    expires_in: 0,
-  });
+  if (config.ebay.refreshToken) {
+    apiInstance.OAuth2.setCredentials({
+      access_token: "",
+      refresh_token: config.ebay.refreshToken,
+      expires_in: 0,
+    });
+  }
 
   return apiInstance;
 }

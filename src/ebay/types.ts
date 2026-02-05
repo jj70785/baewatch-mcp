@@ -56,3 +56,17 @@ export interface AppConfig {
     marketplace: string;
   };
 }
+
+/** Result of checking eBay configuration status */
+export interface ConfigStatus {
+  configured: boolean;
+  message: string;
+  details: {
+    configFileExists: boolean;
+    hasAppId: boolean;
+    hasCertId: boolean;
+    hasDevId: boolean;
+    hasRefreshToken: boolean;
+    environment: string | null;
+  };
+}
