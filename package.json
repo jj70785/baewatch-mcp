@@ -1,0 +1,40 @@
+{
+  "name": "baewatch-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for eBay price research and deal hunting",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "clean": "rimraf dist"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jj70785/baewatch-mcp.git"
+  },
+  "keywords": [
+    "mcp",
+    "ebay",
+    "price-research",
+    "deal-hunting"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/jj70785/baewatch-mcp/issues"
+  },
+  "homepage": "https://github.com/jj70785/baewatch-mcp#readme",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "ebay-api": "^9.4.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.1",
+    "rimraf": "^6.1.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}

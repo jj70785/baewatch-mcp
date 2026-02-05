@@ -1,0 +1,13 @@
+{
+  "ebay": {
+    "appId": "YOUR_APP_ID_HERE",
+    "certId": "YOUR_CERT_ID_HERE",
+    "devId": "YOUR_DEV_ID_HERE",
+    "refreshToken": "YOUR_REFRESH_TOKEN_HERE",
+    "environment": "production"
+  },
+  "defaults": {
+    "resultsLimit": 10,
+    "marketplace": "EBAY_US"
+  }
+}
