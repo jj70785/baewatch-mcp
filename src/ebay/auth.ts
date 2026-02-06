@@ -23,13 +23,14 @@ export function getEbayApi(): eBayApi {
     siteId: eBayApi.SiteId.EBAY_US,
     marketplaceId: eBayApi.MarketplaceId.EBAY_US,
     ruName: "-",
+    // Application-level scope only (for client credentials grant)
     scope: [
       "https://api.ebay.com/oauth/api_scope",
-      "https://api.ebay.com/oauth/api_scope/buy.browse",
     ],
   });
 
-  // Set the OAuth2 refresh token so the SDK can auto-refresh access tokens
+  // Set the OAuth2 refresh token so the SDK can auto-refresh access tokens.
+  // User-level API calls (Browse API etc.) will use this token.
   if (config.ebay.refreshToken) {
     apiInstance.OAuth2.setCredentials({
       access_token: "",

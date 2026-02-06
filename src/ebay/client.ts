@@ -102,13 +102,13 @@ export async function testConnection(): Promise<{ success: boolean; message: str
     const api = getEbayApi();
 
     // Try to get an application access token (client credentials grant).
-    // This only requires appId + certId, not a user refresh token.
-    const token = await api.OAuth2.getAccessToken();
+    // This uses only the basic scope and requires appId + certId.
+    const token = await api.OAuth2.getApplicationAccessToken();
 
     if (token) {
       return {
         success: true,
-        message: "Connected to eBay API successfully! Your credentials are valid.",
+        message: "Connected to eBay API successfully! Your appId and certId are valid.",
       };
     }
 
@@ -117,7 +117,9 @@ export async function testConnection(): Promise<{ success: boolean; message: str
       message: "eBay returned an empty token. Double-check your appId and certId.",
     };
   } catch (error: any) {
-    const msg = error.message || String(error);
+    const msg = error.response?.data
+      ? JSON.stringify(error.response.data)
+      : error.message || String(error);
 
     if (msg.includes("invalid_client") || msg.includes("Unauthorized")) {
       return {
