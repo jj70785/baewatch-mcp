@@ -4,9 +4,9 @@ import { z } from "zod";
 import { checkConfigStatus, testConnection } from "./ebay/client.js";
 import { resetEbayApi } from "./ebay/auth.js";
 
-import { registerSearchSold } from "./tools/searchSold.js";
-// eBay tools — uncomment these once ready
-// import { registerSearchActive } from "./tools/searchActive.js";
+// Finding API is deprecated — search_sold disabled for now
+// import { registerSearchSold } from "./tools/searchSold.js";
+import { registerSearchActive } from "./tools/searchActive.js";
 // import { registerPriceCheck } from "./tools/priceCheck.js";
 
 const server = new McpServer({
@@ -80,9 +80,8 @@ server.tool(
   }
 );
 
-registerSearchSold(server);
-// eBay tools — uncomment these once ready
-// registerSearchActive(server);
+// registerSearchSold(server); // Finding API deprecated
+registerSearchActive(server);
 // registerPriceCheck(server);
 
 // Start the server using stdio transport
