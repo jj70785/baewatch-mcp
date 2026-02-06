@@ -4,8 +4,8 @@ import { z } from "zod";
 import { checkConfigStatus, testConnection } from "./ebay/client.js";
 import { resetEbayApi } from "./ebay/auth.js";
 
-// eBay tools — uncomment these once your API key is set up
-// import { registerSearchSold } from "./tools/searchSold.js";
+import { registerSearchSold } from "./tools/searchSold.js";
+// eBay tools — uncomment these once ready
 // import { registerSearchActive } from "./tools/searchActive.js";
 // import { registerPriceCheck } from "./tools/priceCheck.js";
 
@@ -80,8 +80,8 @@ server.tool(
   }
 );
 
-// eBay tools — uncomment these once your API key is set up
-// registerSearchSold(server);
+registerSearchSold(server);
+// eBay tools — uncomment these once ready
 // registerSearchActive(server);
 // registerPriceCheck(server);
 
