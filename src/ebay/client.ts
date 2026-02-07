@@ -221,7 +221,7 @@ export async function searchActiveListings(
     const params: any = {
       q: query,
       limit: Math.min(limit, 50),
-      sort: "price",
+      // No sort = Best Match (relevance) by default
     };
 
     if (filterParts.length > 0) {
