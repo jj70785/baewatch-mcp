@@ -7,7 +7,7 @@ import { resetEbayApi } from "./ebay/auth.js";
 // Finding API is deprecated — search_sold disabled for now
 // import { registerSearchSold } from "./tools/searchSold.js";
 import { registerSearchActive } from "./tools/searchActive.js";
-// import { registerPriceCheck } from "./tools/priceCheck.js";
+import { registerPriceCheck } from "./tools/priceCheck.js";
 
 const server = new McpServer({
   name: "baewatch",
@@ -82,7 +82,7 @@ server.tool(
 
 // registerSearchSold(server); // Finding API deprecated
 registerSearchActive(server);
-// registerPriceCheck(server);
+registerPriceCheck(server);
 
 // Start the server using stdio transport
 async function main() {

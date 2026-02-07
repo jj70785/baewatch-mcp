@@ -68,36 +68,35 @@ export function formatActiveListings(listings: ActiveListing[]): string {
 }
 
 /**
- * Format a price check comparison.
+ * Format a price check summary based on active listings.
  */
 export function formatPriceCheck(
   stats: PriceStats,
-  cheapestActive: ActiveListing | null,
+  cheapest: ActiveListing,
   askingPrice?: number
 ): string {
   let output = `## Price Check Summary\n\n`;
-  output += `**Sold Price Data (recent):**\n`;
-  output += `- Average sold price: ${formatPrice(stats.average)}\n`;
-  output += `- Median sold price: ${formatPrice(stats.median)}\n`;
-  output += `- Range: ${formatPrice(stats.lowest)} — ${formatPrice(stats.highest)}\n`;
-  output += `- Total recent sales: ${stats.totalSales}\n\n`;
+  output += `**Market Data (${stats.totalSales} active listings, price + shipping):**\n`;
+  output += `- Average: ${formatPrice(stats.average)}\n`;
+  output += `- Median: ${formatPrice(stats.median)}\n`;
+  output += `- Lowest: ${formatPrice(stats.lowest)}\n`;
+  output += `- Highest: ${formatPrice(stats.highest)}\n\n`;
 
-  if (cheapestActive) {
-    const shipping = cheapestActive.shippingCost ?? 0;
-    output += `**Cheapest Active Listing:**\n`;
-    output += `- ${formatPrice(cheapestActive.price)} + ${formatPrice(shipping)} shipping = ${formatPrice(cheapestActive.price + shipping)} total\n`;
-    output += `- ${cheapestActive.title}\n`;
-    output += `- ${cheapestActive.link}\n\n`;
-  }
+  const shipping = cheapest.shippingCost ?? 0;
+  const total = cheapest.price + shipping;
+  output += `**Cheapest Listing:**\n`;
+  output += `- ${formatPrice(cheapest.price)} + ${formatPrice(shipping)} shipping = ${formatPrice(total)} total\n`;
+  output += `- ${cheapest.title}\n`;
+  output += `- ${cheapest.link}\n\n`;
 
   if (askingPrice !== undefined && stats.average > 0) {
     const diff = ((stats.average - askingPrice) / stats.average) * 100;
     if (diff > 0) {
-      output += `**Deal Analysis:** Asking price of ${formatPrice(askingPrice)} is **${Math.round(diff)}% below** the average sold price. Looks like a good deal!\n`;
+      output += `**Deal Analysis:** Asking price of ${formatPrice(askingPrice)} is **${Math.round(diff)}% below** market average. Looks like a good deal!\n`;
     } else if (diff < 0) {
-      output += `**Deal Analysis:** Asking price of ${formatPrice(askingPrice)} is **${Math.round(Math.abs(diff))}% above** the average sold price. May want to negotiate.\n`;
+      output += `**Deal Analysis:** Asking price of ${formatPrice(askingPrice)} is **${Math.round(Math.abs(diff))}% above** market average. May want to negotiate.\n`;
     } else {
-      output += `**Deal Analysis:** Asking price of ${formatPrice(askingPrice)} is right at the average sold price.\n`;
+      output += `**Deal Analysis:** Asking price of ${formatPrice(askingPrice)} is right at market average.\n`;
     }
   }
 
