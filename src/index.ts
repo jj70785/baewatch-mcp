@@ -1,93 +1,49 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { z } from "zod";
 import { checkConfigStatus, testConnection } from "./ebay/client.js";
-import { resetEbayApi } from "./ebay/auth.js";
-
-// Finding API is deprecated — search_sold disabled for now
-// import { registerSearchSold } from "./tools/searchSold.js";
 import { registerSearchActive } from "./tools/searchActive.js";
 import { registerPriceCheck } from "./tools/priceCheck.js";
+import { registerItemDetails } from "./tools/itemDetails.js";
 
-const server = new McpServer({
-  name: "baewatch",
-  version: "1.0.0",
-});
+const server = new McpServer({ name: "baewatch", version: "2.0.0" });
 
-// Test tool — verifies Claude Code can talk to the server
-server.tool(
-  "ping",
-  "Test tool to verify the BAEWATCH MCP server is running and connected.",
-  {
-    message: z.string().optional().describe("Optional message to echo back"),
-  },
-  async ({ message }) => {
-    const reply = message
-      ? `pong! You said: "${message}"`
-      : "pong! BAEWATCH is alive and connected.";
-
-    return {
-      content: [{ type: "text" as const, text: reply }],
-    };
-  }
-);
-
-// Check if eBay credentials are configured (no API call, just checks the config file)
 server.tool(
   "ebay_status",
-  "Check if eBay API credentials are configured in config/config.json. Does NOT call the eBay API — just checks if the config file exists and has real values filled in.",
+  "Check whether BAEWATCH has eBay credentials configured (no API call). Use test_ebay_connection to verify they actually work.",
   {},
   async () => {
-    const status = checkConfigStatus();
-
-    let text = status.configured
-      ? "## eBay Config: READY\n\n"
-      : "## eBay Config: NOT READY\n\n";
-
-    text += `${status.message}\n\n`;
-    text += `**Details:**\n`;
-    text += `- Config file exists: ${status.details.configFileExists ? "Yes" : "No"}\n`;
-    text += `- App ID (Client ID): ${status.details.hasAppId ? "Set" : "Missing"}\n`;
-    text += `- Cert ID (Client Secret): ${status.details.hasCertId ? "Set" : "Missing"}\n`;
-    text += `- Dev ID: ${status.details.hasDevId ? "Set" : "Missing"}\n`;
-    text += `- Refresh Token: ${status.details.hasRefreshToken ? "Set" : "Missing"}\n`;
-    text += `- Environment: ${status.details.environment || "Not set"}\n`;
-
-    return {
-      content: [{ type: "text" as const, text }],
-    };
+    const s = checkConfigStatus();
+    const d = s.details;
+    const text =
+      `## eBay Config: ${s.configured ? "READY" : "NOT READY"}\n\n${s.message}\n\n` +
+      `- Config file: ${d.configFile ?? "none (using env vars only)"}\n` +
+      `- App ID: ${d.hasAppId ? "set" : "missing"}\n` +
+      `- Cert ID: ${d.hasCertId ? "set" : "missing"}\n` +
+      `- Buyer ZIP (for shipping quotes): ${d.zip ?? "not set"}\n` +
+      `- Environment: ${d.environment}\n`;
+    return { content: [{ type: "text" as const, text }] };
   }
 );
 
-// Test the actual eBay API connection (makes a real API call)
 server.tool(
   "test_ebay_connection",
-  "Test the live connection to eBay's API by requesting an access token. Requires credentials to be configured in config/config.json first. Use ebay_status to check config before running this.",
+  "Make a live call to eBay to verify the credentials work (gets a token and runs a 1-result search).",
   {},
   async () => {
-    // Reset cached instance so we pick up any config changes
-    resetEbayApi();
-
-    const result = await testConnection();
-
-    const icon = result.success ? "CONNECTED" : "FAILED";
-    const text = `## eBay Connection Test: ${icon}\n\n${result.message}`;
-
+    const r = await testConnection();
     return {
-      content: [{ type: "text" as const, text }],
-      isError: !result.success,
+      content: [{ type: "text" as const, text: `## eBay Connection: ${r.success ? "OK" : "FAILED"}\n\n${r.message}` }],
+      isError: !r.success,
     };
   }
 );
 
-// registerSearchSold(server); // Finding API deprecated
 registerSearchActive(server);
 registerPriceCheck(server);
+registerItemDetails(server);
 
-// Start the server using stdio transport
 async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  await server.connect(new StdioServerTransport());
   console.error("BAEWATCH MCP server is running");
 }
 
