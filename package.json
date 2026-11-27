@@ -1,11 +1,12 @@
 {
   "name": "baewatch-mcp",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "MCP server for eBay price research and deal hunting",
   "main": "dist/index.js",
   "scripts": {
     "build": "rimraf dist && tsc",
     "start": "node dist/index.js",
+    "check": "node dist/cli.js check",
     "dev": "ts-node src/index.ts",
     "clean": "rimraf dist"
   },

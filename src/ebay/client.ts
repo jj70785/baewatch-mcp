@@ -89,6 +89,8 @@ export interface SearchOptions {
   sort?: SortOrder;
   buyingOption?: BuyingOption;
   zip?: string;
+  /** eBay category id, e.g. 175672 = Laptops & Netbooks */
+  categoryId?: string;
 }
 
 /** Search current eBay listings (Browse API item_summary/search). */
@@ -114,6 +116,7 @@ export async function searchActiveListings(query: string, opts: SearchOptions = 
   });
   const sort = SORT_MAP[opts.sort || "best_match"];
   if (sort) params.set("sort", sort);
+  if (opts.categoryId) params.set("category_ids", opts.categoryId);
 
   const body = await browseGet(`/item_summary/search?${params}`, opts.zip);
   return {
