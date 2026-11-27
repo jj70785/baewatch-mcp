@@ -18,6 +18,10 @@ MCP server for eBay price research and deal hunting. Connects Claude Code direct
 | `search_active` | Search current listings: condition, price range, sort, Buy It Now / auction, shipping, seller feedback |
 | `price_check` | Market price from up to 100 comps, with parts/broken listings and outliers dropped; compares an asking price |
 | `item_details` | Vet one listing: item specifics, condition notes, seller, ship-from, returns, quantity sold |
+| `watch_item` | Track a listing: alerts on any price drop, an optional target price, or when it sells/ends |
+| `watch_search` | Save a search: alerts on new Buy It Now listings in a price range (junk titles skipped; optional required words and category) |
+| `watch_list` / `watch_remove` | Show or delete watches |
+| `watch_check` | Run the checks now and report what changed |
 
 > **No sold-price data.** eBay shut down the Finding API (`findCompletedItems`) in Feb 2025, and its
 > replacement (Marketplace Insights API) is restricted to approved partners. `price_check` uses current
@@ -61,6 +65,26 @@ hermes mcp test baewatch
 ```
 
 Restart the gateway (or `/reload-mcp` in an open session) to pick it up.
+
+## Price tracking
+
+Watches live in `data/watchlist.json` (gitignored; set `BAEWATCH_DATA` to move it). The MCP tools add and
+list watches; a scheduled job does the checking:
+
+```bash
+node dist/cli.js check --notify   # check everything; send alerts to Telegram
+node dist/cli.js list             # print the watchlist
+```
+
+`--notify` sends alerts with `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` (otherwise they're only printed).
+`BAEWATCH_QUIET_HOURS=23-7` makes alerts silent overnight. Example crontab line (every 20 minutes, about
+72 runs a day; each watch costs one Browse API call, well under eBay's 5,000/day limit):
+
+```cron
+*/20 * * * * cd /path/to/baewatch-mcp && TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=... node dist/cli.js check --notify >> check.log 2>&1
+```
+
+Each copy of BAEWATCH has its own watchlist, so add watches on the machine that runs the cron job.
 
 ## Usage Examples
 

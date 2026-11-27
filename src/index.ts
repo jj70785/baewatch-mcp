@@ -4,8 +4,9 @@ import { checkConfigStatus, testConnection } from "./ebay/client.js";
 import { registerSearchActive } from "./tools/searchActive.js";
 import { registerPriceCheck } from "./tools/priceCheck.js";
 import { registerItemDetails } from "./tools/itemDetails.js";
+import { registerWatchTools } from "./tools/watch.js";
 
-const server = new McpServer({ name: "baewatch", version: "2.0.0" });
+const server = new McpServer({ name: "baewatch", version: "2.1.0" });
 
 server.tool(
   "ebay_status",
@@ -41,6 +42,7 @@ server.tool(
 registerSearchActive(server);
 registerPriceCheck(server);
 registerItemDetails(server);
+registerWatchTools(server);
 
 async function main() {
   await server.connect(new StdioServerTransport());
