@@ -1,50 +1,48 @@
-import eBayApi from "ebay-api";
-import { loadConfig } from "./client.js";
-
-let apiInstance: eBayApi | null = null;
+import { loadConfig } from "./config.js";
 
 /**
- * Get or create an authenticated eBay API instance.
- * The ebay-api package handles OAuth token refresh automatically
- * when configured with a refresh token.
+ * Application access token (OAuth client-credentials grant).
+ *
+ * The Browse API only needs an app token, so no user login or refresh token is
+ * involved: App ID + Cert ID are enough, and the token is re-minted every ~2h.
  */
-export function getEbayApi(): eBayApi {
-  if (apiInstance) {
-    return apiInstance;
-  }
+let cached: { token: string; expiresAt: number } | null = null;
 
-  const config = loadConfig();
-
-  apiInstance = new eBayApi({
-    appId: config.ebay.appId,
-    certId: config.ebay.certId,
-    devId: config.ebay.devId,
-    sandbox: config.ebay.environment === "sandbox",
-    siteId: eBayApi.SiteId.EBAY_US,
-    marketplaceId: eBayApi.MarketplaceId.EBAY_US,
-    ruName: "-",
-    // Application-level scope only (for client credentials grant)
-    scope: [
-      "https://api.ebay.com/oauth/api_scope",
-    ],
-  });
-
-  // Set the OAuth2 refresh token so the SDK can auto-refresh access tokens.
-  // User-level API calls (Browse API etc.) will use this token.
-  if (config.ebay.refreshToken) {
-    apiInstance.OAuth2.setCredentials({
-      access_token: "",
-      refresh_token: config.ebay.refreshToken,
-      expires_in: 0,
-    });
-  }
-
-  return apiInstance;
+export function apiBase(): string {
+  return loadConfig().ebay.environment === "sandbox"
+    ? "https://api.sandbox.ebay.com"
+    : "https://api.ebay.com";
 }
 
-/**
- * Reset the API instance (useful if credentials change).
- */
-export function resetEbayApi(): void {
-  apiInstance = null;
+export async function getAppToken(): Promise<string> {
+  if (cached && Date.now() < cached.expiresAt) return cached.token;
+
+  const { appId, certId } = loadConfig().ebay;
+  const res = await fetch(`${apiBase()}/identity/v1/oauth2/token`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: "Basic " + Buffer.from(`${appId}:${certId}`).toString("base64"),
+    },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      scope: "https://api.ebay.com/oauth/api_scope",
+    }),
+  });
+
+  const body: any = await res.json().catch(() => ({}));
+  if (!res.ok || !body.access_token) {
+    if (body.error === "invalid_client") {
+      throw new Error("Invalid credentials: check appId (Client ID) and certId (Client Secret).");
+    }
+    throw new Error(`Token request failed (${res.status}): ${JSON.stringify(body)}`);
+  }
+
+  // Refresh a minute early so a token never expires mid-request.
+  cached = { token: body.access_token, expiresAt: Date.now() + (body.expires_in - 60) * 1000 };
+  return cached.token;
+}
+
+export function resetToken(): void {
+  cached = null;
 }

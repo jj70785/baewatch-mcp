@@ -1,249 +1,155 @@
-import * as fs from "fs";
-import * as path from "path";
-import { AppConfig, ConfigStatus, SoldListing, ActiveListing, CONDITION_MAP } from "./types.js";
-import { getEbayApi } from "./auth.js";
+import { loadConfig, checkConfigStatus } from "./config.js";
+import { getAppToken, apiBase, resetToken } from "./auth.js";
+import {
+  ActiveListing,
+  SearchResult,
+  CONDITION_MAP,
+  SORT_MAP,
+  SortOrder,
+  BuyingOption,
+} from "./types.js";
 
-const CONFIG_PATH = path.join(__dirname, "../../config/config.json");
+export { checkConfigStatus };
 
-/**
- * Check if eBay credentials are configured without throwing.
- * Returns a status object with details about what's missing.
- */
-export function checkConfigStatus(): ConfigStatus {
-  const details = {
-    configFileExists: false,
-    hasAppId: false,
-    hasCertId: false,
-    hasDevId: false,
-    hasRefreshToken: false,
-    environment: null as string | null,
+/** GET a Browse API path with the app token and buyer-context headers. */
+async function browseGet(pathAndQuery: string, zipOverride?: string): Promise<any> {
+  const config = loadConfig();
+  const zip = zipOverride || config.ebay.zip;
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${await getAppToken()}`,
+    "X-EBAY-C-MARKETPLACE-ID": config.defaults.marketplace,
   };
-
-  if (!fs.existsSync(CONFIG_PATH)) {
-    return {
-      configured: false,
-      message:
-        "Config file not found. Copy config/config.example.json to config/config.json and fill in your eBay API credentials.",
-      details,
-    };
+  // With a buyer ZIP, eBay fills in calculated shipping instead of leaving it blank.
+  if (zip) {
+    headers["X-EBAY-C-ENDUSERCTX"] = `contextualLocation=${encodeURIComponent(
+      `country=US,zip=${zip}`
+    )}`;
   }
 
-  details.configFileExists = true;
-
-  let config: AppConfig;
+  let res: Response;
   try {
-    const raw = fs.readFileSync(CONFIG_PATH, "utf-8");
-    config = JSON.parse(raw) as AppConfig;
-  } catch {
-    return {
-      configured: false,
-      message: "config/config.json contains invalid JSON. Please check the format.",
-      details,
-    };
+    res = await fetch(`${apiBase()}/buy/browse/v1${pathAndQuery}`, { headers });
+  } catch (e: any) {
+    throw new Error(`Cannot reach eBay (${e.cause?.code || e.message}). Check the internet connection.`);
   }
-
-  const placeholder = (val: string | undefined) =>
-    !val || val.startsWith("YOUR_") || val.trim() === "";
-
-  details.hasAppId = !placeholder(config.ebay?.appId);
-  details.hasCertId = !placeholder(config.ebay?.certId);
-  details.hasDevId = !placeholder(config.ebay?.devId);
-  details.hasRefreshToken = !placeholder(config.ebay?.refreshToken);
-  details.environment = config.ebay?.environment || null;
-
-  const missing: string[] = [];
-  if (!details.hasAppId) missing.push("appId");
-  if (!details.hasCertId) missing.push("certId");
-  if (!details.hasDevId) missing.push("devId");
-  if (!details.hasRefreshToken) missing.push("refreshToken");
-
-  if (missing.length > 0) {
-    return {
-      configured: false,
-      message: `eBay credentials incomplete. Missing: ${missing.join(", ")}. Edit config/config.json with your real API keys.`,
-      details,
-    };
+  const body: any = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    if (res.status === 401) resetToken();
+    const msg = body.errors?.map((e: any) => e.longMessage || e.message).join("; ");
+    throw new Error(`eBay API error ${res.status}: ${msg || JSON.stringify(body)}`);
   }
+  return body;
+}
 
+/** eBay item URLs carry ~500 chars of tracking params; the bare /itm/<id> link works the same. */
+function legacyId(item: any): string {
+  if (item.legacyItemId) return String(item.legacyItemId);
+  const m = /\|(\d+)\|/.exec(item.itemId || "") || /\/itm\/(\d+)/.exec(item.itemWebUrl || "");
+  return m ? m[1] : "";
+}
+
+function listingType(buyingOptions: string[] = []): string {
+  const parts: string[] = [];
+  if (buyingOptions.includes("FIXED_PRICE")) parts.push("Buy It Now");
+  if (buyingOptions.includes("AUCTION")) parts.push("Auction");
+  if (buyingOptions.includes("BEST_OFFER")) parts.push("Best Offer");
+  return parts.join(" / ") || "Unknown";
+}
+
+function feedback(seller: any): string | null {
+  if (!seller?.feedbackPercentage) return null;
+  return `${seller.feedbackPercentage}% (${Number(seller.feedbackScore ?? 0).toLocaleString("en-US")})`;
+}
+
+function mapSummary(item: any): ActiveListing {
+  const id = legacyId(item);
+  const price = item.price ?? item.currentBidPrice;
+  const ship = item.shippingOptions?.[0]?.shippingCost?.value;
+  const loc = item.itemLocation;
   return {
-    configured: true,
-    message: "eBay credentials are configured and ready.",
-    details,
+    itemId: id,
+    title: item.title || "Unknown",
+    price: parseFloat(price?.value || "0"),
+    currency: price?.currency || "USD",
+    condition: item.condition || "Unknown",
+    conditionId: String(item.conditionId || ""),
+    link: id ? `https://www.ebay.com/itm/${id}` : item.itemWebUrl || "",
+    shippingCost: ship !== undefined ? parseFloat(ship) : null,
+    listingType: listingType(item.buyingOptions),
+    sellerFeedback: feedback(item.seller),
+    location: loc ? [loc.city, loc.stateOrProvince, loc.postalCode, loc.country].filter(Boolean).join(", ") : null,
   };
 }
 
-/**
- * Load the config file from disk.
- * Throws a helpful error if the file doesn't exist or is invalid.
- */
-export function loadConfig(): AppConfig {
-  const status = checkConfigStatus();
-
-  if (!status.configured) {
-    throw new Error(status.message);
-  }
-
-  const raw = fs.readFileSync(CONFIG_PATH, "utf-8");
-  return JSON.parse(raw) as AppConfig;
+export interface SearchOptions {
+  condition?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  limit?: number;
+  sort?: SortOrder;
+  buyingOption?: BuyingOption;
+  zip?: string;
 }
 
-/**
- * Test the eBay API connection by requesting a client credentials token.
- * This verifies that appId and certId are valid without needing a user token.
- */
+/** Search current eBay listings (Browse API item_summary/search). */
+export async function searchActiveListings(query: string, opts: SearchOptions = {}): Promise<SearchResult> {
+  const filters: string[] = [];
+
+  const conditionIds = CONDITION_MAP[opts.condition || "All"] || [];
+  if (conditionIds.length > 0) filters.push(`conditionIds:{${conditionIds.join("|")}}`);
+
+  if (opts.minPrice !== undefined || opts.maxPrice !== undefined) {
+    filters.push(`price:[${opts.minPrice ?? ""}..${opts.maxPrice ?? ""}]`, "priceCurrency:USD");
+  }
+
+  const buying = opts.buyingOption || "buy_it_now";
+  if (buying === "buy_it_now") filters.push("buyingOptions:{FIXED_PRICE}");
+  else if (buying === "auction") filters.push("buyingOptions:{AUCTION}");
+  else filters.push("buyingOptions:{FIXED_PRICE|AUCTION}");
+
+  const params = new URLSearchParams({
+    q: query,
+    limit: String(Math.min(Math.max(opts.limit ?? 10, 1), 200)),
+    filter: filters.join(","),
+  });
+  const sort = SORT_MAP[opts.sort || "best_match"];
+  if (sort) params.set("sort", sort);
+
+  const body = await browseGet(`/item_summary/search?${params}`, opts.zip);
+  return {
+    listings: (body.itemSummaries || []).map(mapSummary),
+    total: body.total ?? 0,
+  };
+}
+
+/** Full details for one listing, by its numeric eBay item number or a listing URL. */
+export async function getItemDetails(idOrUrl: string, zip?: string): Promise<any> {
+  const m = /(\d{9,})/.exec(idOrUrl);
+  if (!m) throw new Error(`"${idOrUrl}" doesn't look like an eBay item number or listing URL.`);
+  try {
+    return await browseGet(`/item/get_item_by_legacy_id?legacy_item_id=${m[1]}`, zip);
+  } catch (e: any) {
+    // Multi-variation listings (sizes/colors) need a specific variation; return the group instead.
+    if (/item group|11006/i.test(e.message)) {
+      return browseGet(`/item/get_items_by_item_group?item_group_id=${m[1]}`, zip);
+    }
+    throw e;
+  }
+}
+
+/** Verify the keys by minting a token and running a tiny search. */
 export async function testConnection(): Promise<{ success: boolean; message: string }> {
   const status = checkConfigStatus();
-
-  if (!status.configured) {
-    return { success: false, message: status.message };
-  }
-
+  if (!status.configured) return { success: false, message: status.message };
   try {
-    const api = getEbayApi();
-
-    // Try to get an application access token (client credentials grant).
-    // This uses only the basic scope and requires appId + certId.
-    const token = await api.OAuth2.getApplicationAccessToken();
-
-    if (token) {
-      return {
-        success: true,
-        message: "Connected to eBay API successfully! Your appId and certId are valid.",
-      };
-    }
-
+    resetToken();
+    await getAppToken();
+    const r = await searchActiveListings("test", { limit: 1 });
     return {
-      success: false,
-      message: "eBay returned an empty token. Double-check your appId and certId.",
+      success: true,
+      message: `Connected. Token OK and Browse API search works (${r.total.toLocaleString("en-US")} results for "test").`,
     };
-  } catch (error: any) {
-    const msg = error.response?.data
-      ? JSON.stringify(error.response.data)
-      : error.message || String(error);
-
-    if (msg.includes("invalid_client") || msg.includes("Unauthorized")) {
-      return {
-        success: false,
-        message:
-          "Invalid credentials. Double-check your appId (Client ID) and certId (Client Secret) in config/config.json.",
-      };
-    }
-
-    if (msg.includes("ENOTFOUND") || msg.includes("ECONNREFUSED")) {
-      return {
-        success: false,
-        message: "Cannot reach eBay servers. Check your internet connection or try again later.",
-      };
-    }
-
-    return {
-      success: false,
-      message: `Connection failed: ${msg}`,
-    };
-  }
-}
-
-/**
- * Search eBay for completed/sold listings.
- */
-export async function searchSoldListings(
-  query: string,
-  condition: string = "All",
-  limit: number = 10
-): Promise<SoldListing[]> {
-  const api = getEbayApi();
-
-  const conditionIds = CONDITION_MAP[condition] || [];
-
-  try {
-    // Use the Finding API for completed listings
-    const filters: Array<{ name: string; value: string }> = [
-      { name: "SoldItemsOnly", value: "true" },
-    ];
-
-    if (conditionIds.length > 0) {
-      filters.push({ name: "Condition", value: conditionIds.join(",") });
-    }
-
-    const response = await api.finding.findCompletedItems({
-      keywords: query,
-      itemFilter: filters,
-      paginationInput: {
-        entriesPerPage: Math.min(limit, 50),
-        pageNumber: 1,
-      },
-      sortOrder: "EndTimeSoonest",
-    });
-
-    const items = response?.searchResult?.item || [];
-
-    return items.map((item: any) => ({
-      title: item.title?.[0] || "Unknown",
-      price: parseFloat(item.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ || "0"),
-      currency: item.sellingStatus?.[0]?.currentPrice?.[0]?.["@currencyId"] || "USD",
-      condition: item.condition?.[0]?.conditionDisplayName?.[0] || "Unknown",
-      link: item.viewItemURL?.[0] || "",
-      dateSold: item.listingInfo?.[0]?.endTime?.[0] || "Unknown",
-    }));
-  } catch (error: any) {
-    throw new Error(`eBay sold search failed: ${error.message || error}`);
-  }
-}
-
-/**
- * Search eBay for active (current) listings.
- */
-export async function searchActiveListings(
-  query: string,
-  condition: string = "All",
-  maxPrice?: number,
-  limit: number = 10
-): Promise<ActiveListing[]> {
-  const api = getEbayApi();
-
-  try {
-    // Use the Browse API for active listings
-    const filterParts: string[] = [];
-
-    const conditionIds = CONDITION_MAP[condition] || [];
-    if (conditionIds.length > 0) {
-      filterParts.push(`conditionIds:{${conditionIds.join("|")}}`);
-    }
-
-    if (maxPrice !== undefined) {
-      filterParts.push(`price:[..${maxPrice}]`);
-      filterParts.push("priceCurrency:USD");
-    }
-
-    // Prefer Buy It Now listings for flipping
-    filterParts.push("buyingOptions:{FIXED_PRICE}");
-
-    const params: any = {
-      q: query,
-      limit: Math.min(limit, 50),
-      // No sort = Best Match (relevance) by default
-    };
-
-    if (filterParts.length > 0) {
-      params.filter = filterParts.join(",");
-    }
-
-    const response = await api.buy.browse.search(params);
-
-    const items = response?.itemSummaries || [];
-
-    return items.map((item: any) => ({
-      title: item.title || "Unknown",
-      price: parseFloat(item.price?.value || "0"),
-      currency: item.price?.currency || "USD",
-      condition: item.condition || "Unknown",
-      link: item.itemWebUrl || "",
-      shippingCost: item.shippingOptions?.[0]?.shippingCost?.value
-        ? parseFloat(item.shippingOptions[0].shippingCost.value)
-        : null,
-      listingType: item.buyingOptions?.includes("FIXED_PRICE") ? "Buy It Now" : "Auction",
-    }));
-  } catch (error: any) {
-    throw new Error(`eBay active search failed: ${error.message || error}`);
+  } catch (e: any) {
+    return { success: false, message: e.message };
   }
 }

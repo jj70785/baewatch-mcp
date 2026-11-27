@@ -1,54 +1,62 @@
-/** Represents a single eBay listing (sold or active) */
-export interface EbayListing {
+/** A current eBay listing from the Browse API */
+export interface ActiveListing {
+  itemId: string;
   title: string;
   price: number;
   currency: string;
   condition: string;
+  conditionId: string;
   link: string;
-  imageUrl?: string;
-}
-
-/** A sold listing includes the date it sold */
-export interface SoldListing extends EbayListing {
-  dateSold: string;
-}
-
-/** An active listing includes shipping cost and listing type */
-export interface ActiveListing extends EbayListing {
+  /** null = eBay didn't give a cost (calculated shipping with no buyer ZIP, or pickup only) */
   shippingCost: number | null;
-  listingType: string; // "Buy It Now", "Auction", etc.
+  listingType: string; // "Buy It Now", "Auction", "Buy It Now / Best Offer", ...
+  sellerFeedback: string | null; // e.g. "99.2% (1,234)"
+  location: string | null;
 }
 
-/** Summary statistics for a set of sold listings */
+export interface SearchResult {
+  listings: ActiveListing[];
+  /** Total matching listings on eBay (not just the ones returned) */
+  total: number;
+}
+
 export interface PriceStats {
   average: number;
   lowest: number;
   highest: number;
   median: number;
-  totalSales: number;
+  count: number;
 }
 
-/** Item condition filter options */
 export type ItemCondition = "New" | "Used" | "For Parts" | "All";
 
 /** Map condition names to eBay condition IDs */
 export const CONDITION_MAP: Record<string, string[]> = {
-  New: ["1000"],
-  Used: ["3000", "4000", "5000", "6000"],
+  New: ["1000", "1500"],
+  Used: ["2010", "2020", "2030", "3000", "4000", "5000", "6000"],
   "For Parts": ["7000"],
   All: [],
 };
 
-/** eBay API configuration */
+export type SortOrder = "best_match" | "price_low" | "price_high" | "newly_listed" | "ending_soon";
+
+export const SORT_MAP: Record<SortOrder, string | undefined> = {
+  best_match: undefined,
+  price_low: "price",
+  price_high: "-price",
+  newly_listed: "newlyListed",
+  ending_soon: "endingSoonest",
+};
+
+export type BuyingOption = "buy_it_now" | "auction" | "all";
+
 export interface EbayConfig {
   appId: string;
   certId: string;
-  devId: string;
-  refreshToken: string;
+  zip: string;
   environment: "production" | "sandbox";
 }
 
-/** Full application config */
 export interface AppConfig {
   ebay: EbayConfig;
   defaults: {
@@ -57,16 +65,14 @@ export interface AppConfig {
   };
 }
 
-/** Result of checking eBay configuration status */
 export interface ConfigStatus {
   configured: boolean;
   message: string;
   details: {
-    configFileExists: boolean;
+    configFile: string | null;
     hasAppId: boolean;
     hasCertId: boolean;
-    hasDevId: boolean;
-    hasRefreshToken: boolean;
-    environment: string | null;
+    zip: string | null;
+    environment: string;
   };
 }

@@ -13,75 +13,54 @@ MCP server for eBay price research and deal hunting. Connects Claude Code direct
 
 | Tool | Description |
 |------|-------------|
-| `ping` | Verify the server is running and connected |
-| `ebay_status` | Check if your eBay credentials are configured (no API call) |
-| `test_ebay_connection` | Test live connection to eBay's API |
-| `search_sold` | Search recently sold listings with price stats |
-| `search_active` | Search current Buy It Now listings with shipping info |
-| `price_check` | All-in-one market price lookup with deal analysis |
+| `ebay_status` | Check whether credentials are configured (no API call) |
+| `test_ebay_connection` | Live check: gets a token and runs a 1-result search |
+| `search_active` | Search current listings: condition, price range, sort, Buy It Now / auction, shipping, seller feedback |
+| `price_check` | Market price from up to 100 comps, with parts/broken listings and outliers dropped; compares an asking price |
+| `item_details` | Vet one listing: item specifics, condition notes, seller, ship-from, returns, quantity sold |
 
-## Quick Start
+> **No sold-price data.** eBay shut down the Finding API (`findCompletedItems`) in Feb 2025, and its
+> replacement (Marketplace Insights API) is restricted to approved partners. `price_check` uses current
+> asking prices; real sale prices usually land somewhat below the median.
 
-### 1. Prerequisites
+## Setup
 
-- [Node.js](https://nodejs.org) v18+
-- [Claude Code](https://claude.ai/download) installed
-- [eBay Developer Account](https://developer.ebay.com/) (free, takes 1-2 days for approval)
-
-### 2. Clone and Install
+Requires Node.js 18+ and an [eBay Developer](https://developer.ebay.com/) production keyset. Only the
+**App ID (Client ID)** and **Cert ID (Client Secret)** are needed. BAEWATCH uses an application token
+(client-credentials grant), so there is no user login and no refresh token to expire.
 
 ```bash
 git clone https://github.com/jj70785/baewatch-mcp.git
 cd baewatch-mcp
 npm install
 npm run build
+cp config/config.example.json config/config.json   # then fill in appId / certId (and zip)
 ```
 
-### 3. Connect to Claude Code
+Credentials can also come from environment variables, which take priority over the file:
+
+| Variable | Meaning |
+|----------|---------|
+| `EBAY_APP_ID` | App ID (Client ID) |
+| `EBAY_CERT_ID` | Cert ID (Client Secret) |
+| `EBAY_ZIP` | Your US ZIP, so eBay quotes calculated shipping (optional, recommended) |
+| `EBAY_ENV` | `production` (default) or `sandbox` |
+| `BAEWATCH_CONFIG` | Path to a config.json somewhere else |
+
+### Claude Code
 
 ```bash
-claude mcp add baewatch node C:\path\to\baewatch-mcp\dist\index.js
+claude mcp add --scope user baewatch -- node /absolute/path/to/baewatch-mcp/dist/index.js
 ```
 
-Restart Claude Code, then test with: **"Use the ping tool"**
-
-### 4. Configure eBay Credentials
-
-Once your eBay developer account is approved:
+### Hermes Agent
 
 ```bash
-copy config\config.example.json config\config.json
+hermes mcp add baewatch --command node --args /absolute/path/to/baewatch-mcp/dist/index.js
+hermes mcp test baewatch
 ```
 
-Edit `config/config.json` with your credentials:
-
-```json
-{
-  "ebay": {
-    "appId": "your-app-id",
-    "certId": "your-cert-id",
-    "devId": "your-dev-id",
-    "refreshToken": "your-refresh-token",
-    "environment": "production"
-  },
-  "defaults": {
-    "resultsLimit": 10,
-    "marketplace": "EBAY_US"
-  }
-}
-```
-
-Then verify with:
-- **"Use ebay_status"** — checks that your config file has all fields filled in
-- **"Use test_ebay_connection"** — makes a real API call to verify your keys work
-
-### 5. Getting Your eBay Credentials
-
-1. Go to [developer.ebay.com](https://developer.ebay.com/) and sign in
-2. Go to **Application access keys** and create a keyset (Production)
-3. Copy your **App ID (Client ID)**, **Cert ID (Client Secret)**, and **Dev ID**
-4. Go to **User Tokens** > select your app > **Get a Token from eBay via Your Application**
-5. Save the **refresh token** — this goes in the config file
+Restart the gateway (or `/reload-mcp` in an open session) to pick it up.
 
 ## Usage Examples
 
@@ -102,12 +81,13 @@ baewatch-mcp/
 ├── src/
 │   ├── index.ts              # MCP server entry point
 │   ├── tools/
-│   │   ├── searchSold.ts     # search_sold tool
 │   │   ├── searchActive.ts   # search_active tool
-│   │   └── priceCheck.ts     # price_check tool
+│   │   ├── priceCheck.ts     # price_check tool
+│   │   └── itemDetails.ts    # item_details tool
 │   ├── ebay/
-│   │   ├── client.ts         # eBay API connection & search functions
-│   │   ├── auth.ts           # OAuth token management
+│   │   ├── client.ts         # Browse API calls
+│   │   ├── auth.ts           # App token (client credentials)
+│   │   ├── config.ts         # Env vars + config.json
 │   │   └── types.ts          # TypeScript types
 │   └── utils/
 │       ├── formatters.ts     # Output formatting
@@ -131,7 +111,8 @@ npm run dev      # Run directly with ts-node (no build step)
 | Problem | Fix |
 |---------|-----|
 | Claude doesn't see BAEWATCH | Run `claude mcp list` to check. Re-add and restart Claude Code. |
-| "Config file not found" | Copy `config/config.example.json` to `config/config.json` |
+| "Missing: appId" | Copy `config/config.example.json` to `config/config.json`, or set `EBAY_APP_ID` / `EBAY_CERT_ID` |
+| Shipping says "not quoted" | Set `zip` / `EBAY_ZIP`. Listings that stay unquoted are usually local pickup only |
 | "Invalid credentials" | Double-check appId and certId in config.json (no extra spaces) |
 | "Cannot reach eBay servers" | Check internet connection, try again in a few minutes |
 | "No results found" | Try simpler/broader search terms |
